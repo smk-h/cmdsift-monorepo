@@ -200,12 +200,30 @@ Linux 版本使用 musl 静态链接，可在任意 Linux 发行版上直接运�
 
 ## 七、 本地构建
 
-- `npm run prepare-binaries` — 下载缺失的二进制文件并校验 SHA256，校验失败会报错退出
-- `npm run prepare-binaries -- --force` — 强制重新下载所有二进制文件（仍会校验）
-- `npm run update-lock` — cmdsift 版本升级后刷新 `binaries.lock.json`
-- `npm run sync-packages` — 根据根版本号和平台列表同步所有子包的 `package.json`
+### 1. 构建脚本
+
+| 命令 | 作用 |
+|------|------|
+| `npm run sync-packages` | 根据根版本号和平台列表同步所有子包的 `package.json`、`README.md` 和 `LICENSE` |
+| `npm run prepare-binaries` | 下载所有平台缺失的二进制文件，用 `binaries.lock.json` 校验 SHA256，不匹配则报错 |
+| `npm run prepare-binaries:win32-x64` | 只下载 Windows x64 平台的二进制并校验 |
+| `npm run prepare-binaries:linux-x64` | 只下载 Linux x64 平台的二进制并校验 |
+| `npm run prepare-binaries -- --force` | 强制重新下载所有平台的二进制文件（仍会校验） |
+| `npm run update-lock` | cmdsift 版本升级后，重新下载所有平台二进制并刷新 `binaries.lock.json` 中的 SHA256 哈希 |
+| `npm run update-lock:win32-x64` | 只刷新 Windows x64 平台的 SHA256 锁 |
+| `npm run update-lock:linux-x64` | 只刷新 Linux x64 平台的 SHA256 锁 |
 
 下载时设置 `GITHUB_TOKEN` 环境变量可避免 GitHub 匿名 API 限流。
+
+### 2. prepare-binaries 与 update-lock 的区别
+
+| | `prepare-binaries` | `update-lock` |
+|---|---|---|
+| **SHA256 校验** | 下载后用 `binaries.lock.json` 中的哈希校验，不匹配则报错 | 下载后跳过校验，直接把新哈希写入 `binaries.lock.json` |
+| **用途** | 发布前准备二进制（日常使用） | cmdsift 升级版本后刷新锁文件 |
+| **场景** | 二进制已在锁文件中登记，确认没被篡改 | 二进制是全新版本，锁文件还没有记录 |
+
+简单说：`update-lock` 是"登记新指纹"，`prepare-binaries` 是"用已有指纹验身"。
 
 ## 八、 更新 cmdsift 版本
 
