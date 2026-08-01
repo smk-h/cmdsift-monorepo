@@ -1,0 +1,96 @@
+# npm 自动发布流水线
+# 当 push 的提交记录中含有 [publish] 时触发
+# 发布流程:
+#   1. 下载各平台二进制文件 (从 cmdsift 的 GitHub Release)
+#   2. SHA256 校验
+#   3. 依次发布平台子包和入口包到 npm
+
+"**":
+  push:
+    - docker:
+        image: node:22
+      stages:
+        - name: node和npm版本
+          script: |
+            echo "Node.js 版本: $(node -v)"
+            echo "npm 版本: $(npm -v)"
+
+        - name: 安装依赖
+          if: |
+            case "$CNB_COMMIT_MESSAGE" in *"[publish]"* ) true ;; * ) false ;; esac
+          script: |
+            # 平台子包带 os/cpu 约束（如 win32 包在 Linux CI 上），需 --force 跳过平台校验
+            npm ci --force
+
+        - name: 同步子包清单
+          if: |
+            case "$CNB_COMMIT_MESSAGE" in *"[publish]"* ) true ;; * ) false ;; esac
+          script: |
+            npm run sync-packages
+
+        - name: 下载并校验二进制
+          if: |
+            case "$CNB_COMMIT_MESSAGE" in *"[publish]"* ) true ;; * ) false ;; esac
+          imports: https://cnb.cool/sumu.k/secret-key/-/blob/main/access-token.yml
+          env:
+            GITHUB_TOKEN: ${GITHUB_CNB_SYNC}
+          script: |
+            npm run prepare-binaries
+
+        - name: 验证二进制文件
+          if: |
+            case "$CNB_COMMIT_MESSAGE" in *"[publish]"* ) true ;; * ) false ;; esac
+          script: |
+            echo "--- win32-x64 ---"
+            ls -la packages/cmdsift-win32-x64/bin/
+            echo "--- linux-x64 ---"
+            ls -la packages/cmdsift-linux-x64/bin/
+
+        - name: 发布平台子包 (linux-x64)
+          if: |
+            case "$CNB_COMMIT_MESSAGE" in *"[publish]"* ) true ;; * ) false ;; esac
+          imports: https://cnb.cool/sumu.k/secret-key/-/blob/main/access-token.yml
+          script: |
+            PKG="@smai-kit/cmdsift-linux-x64"
+            VER=$(node -p "require('./packages/cmdsift-linux-x64/package.json').version")
+            # 幂等保护：该版本已发布则跳过，避免重试时 EPUBLISHCONFLICT
+            if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
+              echo "⏭️  ${PKG}@${VER} 已存在，跳过发布"
+            else
+              echo "//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKENS}" > ~/.npmrc
+              npm config set registry https://registry.npmjs.org/
+              npm publish --access public --workspace @smai-kit/cmdsift-linux-x64
+              echo "✅ 发布成功！包: ${PKG}@${VER}"
+            fi
+
+        - name: 发布平台子包 (win32-x64)
+          if: |
+            case "$CNB_COMMIT_MESSAGE" in *"[publish]"* ) true ;; * ) false ;; esac
+          imports: https://cnb.cool/sumu.k/secret-key/-/blob/main/access-token.yml
+          script: |
+            PKG="@smai-kit/cmdsift-win32-x64"
+            VER=$(node -p "require('./packages/cmdsift-win32-x64/package.json').version")
+            if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
+              echo "⏭️  ${PKG}@${VER} 已存在，跳过发布"
+            else
+              echo "//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKENS}" > ~/.npmrc
+              npm config set registry https://registry.npmjs.org/
+              npm publish --access public --workspace @smai-kit/cmdsift-win32-x64
+              echo "✅ 发布成功！包: ${PKG}@${VER}"
+            fi
+
+        - name: 发布入口包
+          if: |
+            case "$CNB_COMMIT_MESSAGE" in *"[publish]"* ) true ;; * ) false ;; esac
+          imports: https://cnb.cool/sumu.k/secret-key/-/blob/main/access-token.yml
+          script: |
+            PKG="@smai-kit/cmdsift"
+            VER=$(node -p "require('./packages/cmdsift/package.json').version")
+            if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
+              echo "⏭️  ${PKG}@${VER} 已存在，跳过发布"
+            else
+              echo "//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKENS}" > ~/.npmrc
+              npm config set registry https://registry.npmjs.org/
+              npm publish --access public --workspace @smai-kit/cmdsift
+              echo "✅ 发布成功！包: ${PKG}@${VER}"
+            fi
