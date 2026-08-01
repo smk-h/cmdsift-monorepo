@@ -6,37 +6,23 @@
 
 本项目的设计参考了 [@vscode/ripgrep](https://github.com/microsoft/vscode-ripgrep) 的 npm 分发方案。
 
-## 二、 包结构
+### 1. 包结构
 
-本 monorepo 使用 npm workspaces 管理 3 个子包：
+本 monorepo 使用 npm workspaces 管理 3 个子包。根包 `cmdsift-monorepo` 为 `private: true`，不发布到 npm，仅用于本地管理和构建。
 
-| 包名 | 类型 | 内容 | 是否发布到 npm |
-|------|------|------|----------------|
-| `@smai-kit/cmdsift` | 入口包 | 纯 JavaScript，不含二进制，仅负责路径解析 | 是 |
-| `@smai-kit/cmdsift-win32-x64` | 平台子包 | Windows x64 二进制文件 (`bin/cmdsift.exe`) | 是 |
-| `@smai-kit/cmdsift-linux-x64` | 平台子包 | Linux x64 二进制文件 (`bin/cmdsift`) | 是 |
+| 包名 | 类型 | 内容 | 是否发布到 npm | 原因 |
+|------|------|------|----------------|------|
+| `@smai-kit/cmdsift` | 入口包 | 纯 JavaScript，不含二进制，仅负责路径解析 | 是 | 用户 `npm install` 时直接安装的包，必须发布 |
+| `@smai-kit/cmdsift-win32-x64` | 平台子包 | Windows x64 二进制文件 (`bin/cmdsift.exe`) | 是 | 入口包通过 `optionalDependencies` 引用，npm 按平台自动安装；不发布则找不到二进制 |
+| `@smai-kit/cmdsift-linux-x64` | 平台子包 | Linux x64 二进制文件 (`bin/cmdsift`) | 是 | 同上，Linux 平台必须发布 |
 
-根包 `cmdsift-monorepo` 为 `private: true`，不发布到 npm。
-
-## 三、 是否需要发布到 npm
-
-### 1. 入口包：需要发布
-
-入口包 `@smai-kit/cmdsift` 必须发布到 npm，这是用户 `npm install` 时直接安装的包。它本身不含二进制文件，仅包含路径解析逻辑。
-
-### 2. 平台子包：需要发布
-
-两个平台子包都必须发布到 npm registry。原因如下：
+两个平台子包都必须发布到 npm registry，原因如下：
 
 - 入口包的 `package.json` 中通过 `optionalDependencies` 声明了对平台子包的依赖
 - 用户执行 `npm install @smai-kit/cmdsift` 时，npm 会根据当前操作系统的 `os` 和 `cpu` 字段自动安装匹配的平台子包
 - 如果平台子包未发布到 npm，npm 安装时将无法找到对应平台的二进制文件，入口包的路径解析逻辑会抛出 `Could not find` 错误
 
-### 3. 根包：不发布
-
-根包 `cmdsift-monorepo` 设置了 `"private": true`，永远不会发布到 npm。它仅用于本地管理和构建。
-
-## 四、 工作原理
+## 二、 工作原理
 
 ### 1. 整体架构
 
@@ -129,7 +115,7 @@ npm run prepare-binaries
 - **SHA256 完整性校验**：`binaries.lock.json` 记录每个平台二进制的哈希值，发布前强制校验，防止篡改和损坏
 - **支持交叉安装**：运行时优先读取 `npm_config_arch` 环境变量，支持 `npm install --arch=arm64` 等交叉安装场景
 
-## 五、 安装与使用
+## 三、 安装与使用
 
 ### 1. 安装
 
@@ -189,7 +175,7 @@ export const cmdsiftPath = resolved;
 
 返回 cmdsift 可执行文件的绝对路径字符串，将该路径传给 `child_process.execFile` 或 `child_process.spawn` 即可调用 cmdsift
 
-## 六、 支持的平台
+### 5. 支持的平台
 
 | 操作系统 | CPU 架构 | Rust Target | 二进制文件名 | 链接方式 |
 |----------|----------|-------------|-------------|----------|
@@ -198,7 +184,7 @@ export const cmdsiftPath = resolved;
 
 Linux 版本使用 musl 静态链接，可在任意 Linux 发行版上直接运行，无需担心 glibc 版本兼容性。
 
-## 七、 本地构建
+## 四、 构建与版本管理
 
 ### 1. 构建脚本
 
@@ -225,7 +211,7 @@ Linux 版本使用 musl 静态链接，可在任意 Linux 发行版上直接运�
 
 简单说：`update-lock` 是"登记新指纹"，`prepare-binaries` 是"用已有指纹验身"。
 
-## 八、 更新 cmdsift 版本
+### 3. 更新 cmdsift 版本
 
 当 cmdsift 发布新版本时，按以下步骤更新本模块：
 
@@ -233,12 +219,12 @@ Linux 版本使用 musl 静态链接，可在任意 Linux 发行版上直接运�
 2. 运行 `npm run update-lock`，重新下载所有平台的二进制文件并更新 `binaries.lock.json` 中的 SHA256 哈希
 3. 提交 `build/platforms.js` 和 `binaries.lock.json` 的变更
 
-## 九、 相关项目
+### 4. 相关项目
 
 - [cmdsift](https://github.com/smk-h/cmdsift) — Rust 源码项目，通过 GitHub Actions 发布二进制到 Release 页面
 - [vscode-ripgrep](https://github.com/microsoft/vscode-ripgrep) — 本项目的设计参考，ripgrep 的 npm 分发方案
 
-## 十、 License
+## 五、 License
 
 MIT
 
