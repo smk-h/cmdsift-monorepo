@@ -1,0 +1,29 @@
+{
+  "name": "@smai-kit/cmdsift",
+  "version": "0.1.0",
+  "description": "A module for using cmdsift in a Node project",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib/",
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smk-h/cmdsift-monorepo"
+  },
+  "author": "sumu",
+  "license": "MIT",
+  "optionalDependencies": {
+    "@smai-kit/cmdsift-win32-x64": "0.1.0",
+    "@smai-kit/cmdsift-linux-x64": "0.1.0"
+  }
+}
