@@ -1,0 +1,19 @@
+{
+  "name": "@smai-kit/cmdsift-win32-x64",
+  "version": "0.1.0",
+  "description": "cmdsift binary for win32-x64. Used by @smai-kit/cmdsift.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smk-h/cmdsift-monorepo"
+  },
+  "license": "MIT",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/"
+  ]
+}
