@@ -2,103 +2,111 @@
 
 ## 一、 概述
 
-本 monorepo 以 lockstep 方式发布 3 个 npm 包，它们共享同一个版本号（取自根 [`package.json`](package.json)）：
+本 monorepo 以 lockstep 方式发布 3 个 npm 包，它们共享同一个 npm 包版本号（取自根 [`package.json`](package.json) 的 `version`）：
 
 - `@smai-kit/cmdsift` —— 入口包（JS 路径解析器，位于 [`packages/cmdsift/`](packages/cmdsift/)）
 - `@smai-kit/cmdsift-<os>-<cpu>` —— 各平台二进制子包（位于 [`packages/`](packages/)）
 
 二进制文件不在本仓库内，发布时由 [`build/prepare-binaries.js`](build/prepare-binaries.js) 从上游 [`smk-h/cmdsift`](https://github.com/smk-h/cmdsift) 的 GitHub Release 下载并做 SHA256 校验。
 
+### 1. 两个独立的版本号
+
+本仓库存在两个**相互独立**的版本号，切勿混淆：
+
+| 版本号 | 位置 | 含义 | 变更时机 |
+|--------|------|------|---------|
+| 上游二进制版本 | [`build/platforms.js`](build/platforms.js) 的 `VERSION` 常量 | 上游 cmdsift 的 release tag（如 `v0.1.0`）| 上游 cmdsift 发布新二进制 |
+| npm 包版本 | 根 [`package.json`](package.json) 的 `version` 字段 | 本仓库发布到 npm 的版本号（如 `0.1.0`）| 本仓库任何改动需要发版时 |
+
+两者数值互不绑死（vscode-ripgrep 的 npm 版本 `1.18.0` 与上游 ripgrep `v15.0.1` 即是如此），但「上游发新版 → 下游必发新版」——因为二进制行为变了，用户必须能通过 npm 拿到新二进制。
+
 【**注意**】
 
-升级版本时只需手动改两处真相源（二进制版本常量 + npm 包版本号），其余哈希锁与子包清单全部由脚本自动生成，**禁止手填**。
+哈希锁与子包清单全部由脚本自动生成，**禁止手填**。版本变更时只需动上述两个真相源之一（或两个都动），脚本会处理其余。
 
-## 二、 升级 cmdsift 二进制版本
+### 2. npm 版本号的语义约定
 
-当上游 `smk-h/cmdsift` 发布了新的 GitHub Release（如 `v0.2.0`）时使用本流程。
+npm 包版本号采用 semver 三段式 `X.Y.Z`，用三个层级区分**变化来源**，让用户从版本号即可判断变化性质：
 
-### 1. 修改上游版本常量
-
-编辑 [`build/platforms.js`](build/platforms.js) 的 `VERSION` 常量，指向新的 release tag：
-
-```js
-// build/platforms.js
-const VERSION = 'v0.2.0';
+```
+X . Y . Z
+│   │   └─ patch（末位）：仅入口包 JS 代码改动，二进制不变（末位 +1）
+│   └───── minor（中位）：上游二进制更新（中位 +1，末位归零）
+└───────── major（首位）：破坏性变更（首位 +1，中位与末位归零）
 ```
 
-`VERSION` 是上游二进制版本的唯一真相源，`prepare-binaries.js` 和 `sync-packages.js` 都从它读取下载 URL。
+三种典型发版情况对应的操作：
 
-### 2. 修改 npm 包版本号
+| 情况 | 谁变了 | semver bump | 示例 | 怎么操作 |
+|------|--------|------------|------|---------|
+| ① 仅入口包更新 | `lib/index.js` 等 JS 代码 | patch | 0.2.3→0.2.4 | 人工改 version + `npm run sync-packages` |
+| ② 仅上游二进制更新 | cmdsift 二进制 | minor | 0.2.3→0.3.0 | `npm run auto-upgrade`（自动 minor bump）|
+| ③ 两者都更新 | JS + 二进制 | minor | 0.2.3→0.3.0 | 先改 JS，再 `npm run auto-upgrade`（自动 minor bump）|
 
-编辑根 [`package.json`](package.json) 的 `version` 字段（如 `0.1.0` → `0.2.0`）。由于二进制发生了变更，应按 semver 语义决定是 major 还是 minor 升级：
+【**patch 归零规则**】
 
-- 不兼容改动：升 major
-- 向后兼容的新功能：升 minor
+情况②③触发 minor bump 时，patch 位会**归零**。例如当前是 `0.2.3`（已发过 3 个入口包补丁），上游二进制一更新就变成 `0.3.0`（不是 `0.3.3`）。这样 minor 版本永远是「该二进制版本的第一个发布」，patch 位干净地记录「这个二进制版本下又改了几次入口包」。
 
-### 3. 刷新哈希锁文件
+这样约定后，版本号的语义清晰可读：
 
-运行下面的脚本，它会下载各平台 archive、计算 SHA256 并重写 [`binaries.lock.json`](binaries.lock.json)：
+- 看到 patch 位非 0（如 `0.2.3`）→ 知道在这个二进制版本下又改了 3 次入口包代码
+- 看到 minor 位变化（如 `0.2.x` → `0.3.0`）→ 知道二进制更新了，patch 计数从头开始
+
+## 二、 升级上游二进制版本
+
+当上游 `smk-h/cmdsift` 发布了新的 GitHub Release（如 `v0.2.0`）时使用本流程（对应第一章的情况②③）。`auto-upgrade` 脚本会一次性完成「更新二进制版本 + minor bump npm 版本 + 同步子包」。
+
+### 1. 运行自动升级脚本
 
 ```sh
-npm run update-lock
+npm run auto-upgrade
 ```
 
-该脚本需要访问 GitHub Releases，建议设置 `GITHUB_TOKEN` 以避免匿名 API 限流：
+该脚本自动完成 5 步：
+
+- 查询上游最新 release tag（或用 `--target=v0.2.0` 指定版本）
+- 若 [`build/platforms.js`](build/platforms.js) 已是该版本则跳过（退出码 2）
+- 更新 `VERSION` 常量
+- 下载各平台 archive、计算 SHA256 并重写 [`binaries.lock.json`](binaries.lock.json)
+- **minor bump npm 版本号**（中位 +1、末位归零，如 `0.2.3` → `0.3.0`）并运行 `sync-packages` 同步到子包
+
+脚本需要访问 GitHub Releases，建议设置 `GITHUB_TOKEN` 以避免匿名 API 限流：
 
 ```sh
-GITHUB_TOKEN=<your-token> npm run update-lock
+GITHUB_TOKEN=<your-token> npm run auto-upgrade
 ```
 
-如需只更新单个平台，可加 `--target` 参数：
+### 2. 提交并发布
 
-```sh
-npm run update-lock:linux-x64
-npm run update-lock:win32-x64
-```
+需要提交的文件由脚本自动改好，包括：
 
-### 4. 同步子包清单
-
-运行下面的脚本，把根版本号同步到所有子包的 `package.json` 及入口包的 `optionalDependencies`：
-
-```sh
-npm run sync-packages
-```
-
-该脚本是幂等的，重复运行不会产生多余 diff。
-
-### 5. 提交并发布
-
-需要提交的文件包括：
-
-- [`build/platforms.js`](build/platforms.js)（新版本常量）
-- 根 [`package.json`](package.json)（新 npm 版本号）
+- [`build/platforms.js`](build/platforms.js)（新二进制版本常量）
 - [`binaries.lock.json`](binaries.lock.json)（新 SHA256）
+- 根 [`package.json`](package.json)（minor bump 后的 npm 版本）
 - 所有由 `sync-packages` 重新生成的 [`packages/`](packages/) 下的 `package.json`、`README.md`、`LICENSE`
 
-提交信息中带上 `[publish]` 关键字即可触发 CNB 发布流水线：
+提交信息中带上 `[publish]` 关键字即可触发 CNB 发布流水线（版本号取脚本输出的 npm 版本）：
 
 ```sh
-git commit -m "release: v0.2.0 [publish]"
+git commit -m "release: 0.3.0 [publish]"
 ```
 
 ## 三、 仅发布入口包代码改动
 
-当只改动了 [`packages/cmdsift/lib/`](packages/cmdsift/lib/) 下的 JS 代码（如修复 README、调整路径解析逻辑），不涉及上游二进制升级时使用本流程。
+当只改动了 [`packages/cmdsift/lib/`](packages/cmdsift/lib/) 下的 JS 代码（如修复 README、调整路径解析逻辑），不涉及上游二进制升级时使用本流程（对应第一章的情况①）。
 
-### 1. 修改 npm 包版本号
+### 1. patch bump npm 包版本
 
-只需编辑根 [`package.json`](package.json) 的 `version` 字段（通常是 patch 升级，如 `0.1.0` → `0.1.1`）。
+此场景**不需要**运行 `auto-upgrade`（上游二进制没变），也**不需要**运行 `update-lock`。
 
-【**注意**】
-
-此场景**不需要**修改 [`build/platforms.js`](build/platforms.js)，也**不需要**运行 `update-lock`。
+按 semver 约定，仅入口包代码改动对应 **patch** 升级（末位 +1，中位不变）。编辑根 [`package.json`](package.json) 的 `version` 字段（如 `0.3.0` → `0.3.1`）。
 
 ### 2. 同步并提交
 
 ```sh
 npm run sync-packages
 git add -A
-git commit -m "release: v0.1.1 [publish]"
+git commit -m "release: 0.3.1 [publish]"
 ```
 
 ## 四、 添加新平台
@@ -142,7 +150,7 @@ npm run sync-packages
 
 ### 5. 升级版本并提交
 
-按「升级二进制版本」流程的第 2、4、5 步操作：改根版本号、`sync-packages`、提交带 `[publish]` 的 commit。
+新增平台属于功能性变化，按 semver 约定对应 **minor** 升级（中位 +1、末位归零，如 `0.3.1` → `0.4.0`）。编辑根 [`package.json`](package.json) 的 `version` 字段，运行 `sync-packages`，提交带 `[publish]` 的 commit。
 
 ## 五、 CI 发布流水线行为
 
@@ -177,6 +185,14 @@ node -e "import('@smai-kit/cmdsift').then(m => console.log(m.cmdsiftPath))"
 ```
 
 输出的路径应位于 [`packages/cmdsift-<你的os>-<你的cpu>/bin/`](packages/) 下。
+
+更完整的端到端验证（模拟真实用户安装）可运行：
+
+```sh
+npm run verify
+```
+
+该命令基于 `npm pack` 在隔离临时目录模拟安装，无需发布即可验证改动对下游可用。
 
 ---
 *本文档由 markdowncli 技能辅助生成*

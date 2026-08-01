@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "sync-packages": "node ./build/sync-packages.js",
+    "auto-upgrade": "node ./build/auto-upgrade.js",
     "verify": "node ./test/local-verify.mjs",
     "prepare-binaries": "node ./build/prepare-binaries.js",
     "prepare-binaries:win32-x64": "node ./build/prepare-binaries.js --target x86_64-pc-windows-msvc",
