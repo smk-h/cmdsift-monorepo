@@ -123,7 +123,34 @@ npm run prepare-binaries
 npm install @smai-kit/cmdsift
 ```
 
-### 2. ESM 导入
+npm 会根据当前系统的 `os` 和 `cpu` 自动只安装匹配的平台子包，无需手动指定平台。
+
+### 2. 多平台部署
+
+默认的 `npm install @smai-kit/cmdsift` 只会安装当前主机平台的二进制。当需要将同一份项目部署到不同平台的服务器，或在构建机上同时准备多个平台的二进制时，可以显式安装目标平台的子包。
+
+#### 2.1 部署到指定平台服务器
+
+在每个目标服务器上，额外安装该平台的子包（入口包会自动安装主机平台包，此处为补充确保目标平台二进制就位）：
+
+```bash
+# 部署到 Linux x64 服务器
+npm install @smai-kit/cmdsift-linux-x64 --force --no-save
+
+# 部署到 Windows x64 服务器
+npm install @smai-kit/cmdsift-win32-x64 --force --no-save
+```
+
+两个关键参数的作用：
+
+- `--force`：绕过平台子包的 `os`/`cpu` 约束，否则非主机平台包会被 npm 以 `EBADPLATFORM` 拦截
+- `--no-save`：不把平台子包写入 `package.json` 的 `dependencies`，因为它只是部署时的运行依赖，不应污染项目的依赖声明
+
+#### 2.2 运行时自动选择当前平台
+
+无论安装了几个平台子包，运行时入口包的 `cmdsiftPath` 都会根据 `process.platform` 自动选择当前平台对应的二进制，无需在代码中做任何平台判断。例如在 Linux 服务器上会自动使用 `cmdsift-linux-x64/bin/cmdsift`，在 Windows 服务器上自动使用 `cmdsift-win32-x64/bin/cmdsift.exe`。
+
+### 3. ESM 导入
 
 ```js
 import { cmdsiftPath } from '@smai-kit/cmdsift';
@@ -138,7 +165,7 @@ execFile(cmdsiftPath, ['--help'], (error, stdout, stderr) => {
 });
 ```
 
-### 3. CommonJS 导入
+### 4. CommonJS 导入
 
 ```js
 const { cmdsiftPath } = require('@smai-kit/cmdsift');
@@ -153,9 +180,9 @@ execFile(cmdsiftPath, ['--help'], (error, stdout, stderr) => {
 });
 ```
 
-### 4. API
+### 5. API
 
-#### 4.1 cmdsiftPath()
+#### 5.1 cmdsiftPath()
 
 cmdsift 可执行文件的绝对路径（`string`），该变量在 `packages/cmdsift/lib/index.js` 文件中导出：
 
@@ -175,7 +202,7 @@ export const cmdsiftPath = resolved;
 
 返回 cmdsift 可执行文件的绝对路径字符串，将该路径传给 `child_process.execFile` 或 `child_process.spawn` 即可调用 cmdsift
 
-### 5. 支持的平台
+### 6. 支持的平台
 
 | 操作系统 | CPU 架构 | Rust Target | 二进制文件名 | 链接方式 |
 |----------|----------|-------------|-------------|----------|
