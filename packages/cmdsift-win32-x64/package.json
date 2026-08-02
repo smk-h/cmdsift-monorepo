@@ -1,6 +1,6 @@
 {
   "name": "@smai-kit/cmdsift-win32-x64",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "cmdsift binary for win32-x64. Used by @smai-kit/cmdsift.",
   "repository": {
     "type": "git",
