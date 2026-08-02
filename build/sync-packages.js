@@ -9,12 +9,14 @@
  * Date       : 2026/08/01
  * Version    : 0.1.0
  * Description: 根据根版本号和平台列表同步所有子包的 package.json，
- *              确保版本号和 optionalDependencies 保持一致
+ *              确保版本号和 optionalDependencies 保持一致；
+ *              最后同步重写 package-lock.json，保证 CI npm ci 通过
  * ======================================================
  */
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const { platforms, packageNameFor } = require('./platforms');
 
 const ROOT = path.join(__dirname, '..');
@@ -132,6 +134,21 @@ function syncWrapperPackage() {
   return writeIfChanged(wrapperPkgPath, json) ? 1 : 0;
 }
 
+/**
+ * 同步重写 package-lock.json，使其与各 package.json 的版本/依赖声明一致
+ *
+ * 版本号或 optionalDependencies 变化后，lockfile 中仍记录旧规格，
+ * 会导致 CI 的 npm ci 校验失败（out of sync）。
+ * --package-lock-only 只重写 lockfile、不动 node_modules；
+ * --force 用于跳过非宿主平台子包的 os/cpu 校验（EBADPLATFORM）。
+ */
+function syncPackageLock() {
+  execSync('npm install --package-lock-only --force --no-audit --no-fund', {
+    cwd: ROOT,
+    stdio: 'pipe',
+  });
+}
+
 function main() {
   const platformChanges = syncPlatformPackages();
   const wrapperChanges = syncWrapperPackage();
@@ -141,6 +158,9 @@ function main() {
   } else {
     console.log(`Updated ${total} file(s) across packages/`);
   }
+
+  syncPackageLock();
+  console.log('package-lock.json synced.');
 }
 
 main();
