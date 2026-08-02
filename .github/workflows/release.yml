@@ -1,0 +1,142 @@
+name: Publish Release
+
+# 触发条件：推送到 main/master 且 commit message 含 [release] 标记
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write # 创建 tag / release 需要
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # 1. 读取版本号并创建草稿 Release（占位，后续 job 上传产物）
+  # ─────────────────────────────────────────────────────────────
+  release:
+    name: Create Draft Release
+    runs-on: ubuntu-latest
+    if: contains(join(github.event.commits.*.message, ' '), '[release]')
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read version from package.json
+        id: meta
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 产物说明
+
+            | 文件 | 适用场景 |
+            |------|---------|
+            | `cmdsift-offline-<version>-linux-x64.tar.gz` | Linux x64 离线包（含平台二进制），**无网**环境 |
+            | `cmdsift-offline-<version>-win32-x64.tar.gz` | Windows x64 离线包（含平台二进制），**无网**环境 |
+
+            ### 离线环境（offline 包）
+
+            下载对应平台的 `cmdsift-offline-<version>-<平台>.tar.gz`，传到目标服务器后：
+
+            ```bash
+            tar -xzf cmdsift-offline-${{ steps.meta.outputs.version }}-<平台>.tar.gz
+            cd cmdsift-offline-${{ steps.meta.outputs.version }}-<平台>
+            bash offline-install.sh
+            which cmdsift  # 验证
+            ```
+
+            > 离线包含入口包（lib/）+ 平台子包（bin/ 二进制）+ 安装脚本。
+            > `offline-install.sh` 复刻 `npm install -g` 两步（复制包到全局 node_modules + 建 bin 软链接），不触发任何 npm 生命周期脚本、不依赖网络。
+            > 平台必须匹配：二进制与 OS/架构绑定。
+
+  # ─────────────────────────────────────────────────────────────
+  # 2. 多平台构建：为每个平台下载二进制并打包离线包
+  #
+  #    cmdsift 的二进制是 Rust 预编译产物，从 GitHub Release 下载即可，
+  #    不依赖 runner 平台编译。用 matrix 分平台并行，各平台独立失败不互相影响。
+  #    GITHUB_TOKEN 避免 Release 下载被匿名 API 限流。
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.target }})
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: ubuntu-latest
+            target: win32-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Prepare platform binary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run prepare-binaries:${{ matrix.target }}
+
+      - name: Pack offline bundle
+        run: npm run pack-offline:${{ matrix.target }}
+
+      - name: Verify archive
+        shell: bash
+        run: |
+          echo "== dist 内容 =="
+          ls -lh dist/
+          echo "== tarball 结构 =="
+          tar -tzf dist/*.tar.gz | head -20
+
+      - name: Read archive filename
+        id: archive
+        shell: bash
+        run: |
+          FILE=$(ls dist/*.tar.gz | head -1)
+          echo "path=$FILE" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$FILE")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload offline bundle
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.release.outputs.tag }}
+          draft: true
+          files: ${{ steps.archive.outputs.path }}
+
+  # ─────────────────────────────────────────────────────────────
+  # 3. 全部产物上传完毕，把草稿 Release 正式发布
+  # ─────────────────────────────────────────────────────────────
+  publish:
+    name: Publish Release
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark release as published (undraft)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.release.outputs.tag }}
+          draft: false
+          make_latest: true
