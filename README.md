@@ -125,11 +125,91 @@ npm install @smai-kit/cmdsift
 
 npm 会根据当前系统的 `os` 和 `cpu` 自动只安装匹配的平台子包，无需手动指定平台。
 
-### 2. 多平台部署
+### 2. 离线安装（无网络 / 内网环境）
+
+适合**无 npm 访问**的内网 / 离线服务器。思路是在有网络的构建机上把入口包 + 平台子包打成一个离线 tarball，传到目标机器后用自带脚本全局安装，全过程不联网。
+
+#### 2.1 构建离线包（在有网络的机器上）
+
+前置条件：目标平台的二进制已通过 `prepare-binaries` 填充到 `packages/cmdsift-<os>-<cpu>/bin/` 下。
+
+```bash
+# 当前平台
+npm run pack-offline
+
+# 指定平台
+npm run pack-offline:linux-x64
+npm run pack-offline:win32-x64
+
+# 所有平台各打一个包
+npm run pack-offline:all
+```
+
+产物在 `dist/` 目录下，文件名格式为 `cmdsift-offline-<version>-<os>-<cpu>.tar.gz`。离线包是扁平结构：
+
+```
+cmdsift-offline-<version>-<os>-<cpu>/
+├── offline-install.sh        ← 离线安装脚本
+├── cmdsift/                   ← 入口包（lib/ + package.json）
+└── cmdsift-<os>-<cpu>/        ← 平台子包（bin/ 二进制）
+```
+
+> `pack-offline.js` 按 `package.json` 的 `files` 字段过滤，离线包内容与发布到 npm 的 tarball 一致。
+
+#### 2.2 传到目标机器并解压
+
+```bash
+# 构建机 → 目标机器
+scp dist/cmdsift-offline-0.3.0-linux-x64.tar.gz sumu@192.168.1.100:~/
+
+# 目标机器上解压
+tar -xzf cmdsift-offline-0.3.0-linux-x64.tar.gz
+cd cmdsift-offline-0.3.0-linux-x64
+```
+
+#### 2.3 全局安装
+
+离线包根目录自带 `offline-install.sh`，直接运行即可把包装到全局 npm 目录。它复刻 `npm install -g` 的两步（复制包到 `node_modules` + 建 bin 软链接），但**不触发任何 npm 生命周期脚本、不依赖网络**：
+
+```bash
+bash offline-install.sh
+```
+
+脚本做的事：
+
+1. 把入口包 `cmdsift/` 复制到 `$(npm root -g)/@smai-kit/cmdsift/`；
+2. 把平台子包 `cmdsift-<os>-<cpu>/` 复制到 `$(npm root -g)/@smai-kit/cmdsift-<os>-<cpu>/`；
+3. 在 `$(npm prefix -g)/bin/` 创建 `cmdsift` 软链接，指向入口包的 `lib/cli.js`；
+4. `which cmdsift` 验证。
+
+因为 npm 全局 `node_modules` 是扁平结构（`@smai-kit/` 下平铺各包），入口包的 `require.resolve('@smai-kit/cmdsift-<os>-<cpu>/bin/cmdsift')` 能正常找到二进制，与 `npm install -g` 的运行时行为完全一致。
+
+> 权限：`npm prefix -g` 不可写时（系统级 npm 装在 `/usr/local`），用 `sudo bash offline-install.sh`；nvm 装在用户目录则直接跑。
+
+验证：
+
+```bash
+which cmdsift              # 应输出 bin 绝对路径
+cmdsift --help             # 确认二进制可执行
+```
+
+> 安装结果与 `npm install -g` 等价，可用 `bash offline-install.sh uninstall` 卸载，或 `npm uninstall -g @smai-kit/cmdsift`。
+
+#### 2.4 卸载
+
+```bash
+# 用离线脚本卸载（不依赖源目录）
+bash offline-install.sh uninstall
+
+# 或用 npm 卸载
+npm uninstall -g @smai-kit/cmdsift
+```
+
+### 3. 多平台部署
 
 默认的 `npm install @smai-kit/cmdsift` 只会安装当前主机平台的二进制。当需要将同一份项目部署到不同平台的服务器，或在构建机上同时准备多个平台的二进制时，可以显式安装目标平台的子包。
 
-#### 2.1 部署到指定平台服务器
+#### 3.1 部署到指定平台服务器
 
 在每个目标服务器上，额外安装该平台的子包（入口包会自动安装主机平台包，此处为补充确保目标平台二进制就位）：
 
@@ -146,11 +226,11 @@ npm install @smai-kit/cmdsift-win32-x64 --force --no-save
 - `--force`：绕过平台子包的 `os`/`cpu` 约束，否则非主机平台包会被 npm 以 `EBADPLATFORM` 拦截
 - `--no-save`：不把平台子包写入 `package.json` 的 `dependencies`，因为它只是部署时的运行依赖，不应污染项目的依赖声明
 
-#### 2.2 运行时自动选择当前平台
+#### 3.2 运行时自动选择当前平台
 
 无论安装了几个平台子包，运行时入口包的 `cmdsiftPath` 都会根据 `process.platform` 自动选择当前平台对应的二进制，无需在代码中做任何平台判断。例如在 Linux 服务器上会自动使用 `cmdsift-linux-x64/bin/cmdsift`，在 Windows 服务器上自动使用 `cmdsift-win32-x64/bin/cmdsift.exe`。
 
-### 3. ESM 导入
+### 4. ESM 导入
 
 ```js
 import { cmdsiftPath } from '@smai-kit/cmdsift';
@@ -165,7 +245,7 @@ execFile(cmdsiftPath, ['--help'], (error, stdout, stderr) => {
 });
 ```
 
-### 4. CommonJS 导入
+### 5. CommonJS 导入
 
 ```js
 const { cmdsiftPath } = require('@smai-kit/cmdsift');
@@ -180,7 +260,7 @@ execFile(cmdsiftPath, ['--help'], (error, stdout, stderr) => {
 });
 ```
 
-### 5. API
+### 6. API
 
 #### 5.1 cmdsiftPath()
 
@@ -202,7 +282,7 @@ export const cmdsiftPath = resolved;
 
 返回 cmdsift 可执行文件的绝对路径字符串，将该路径传给 `child_process.execFile` 或 `child_process.spawn` 即可调用 cmdsift
 
-### 6. 支持的平台
+### 7. 支持的平台
 
 | 操作系统 | CPU 架构 | Rust Target | 二进制文件名 | 链接方式 |
 |----------|----------|-------------|-------------|----------|
@@ -225,6 +305,10 @@ Linux 版本使用 musl 静态链接，可在任意 Linux 发行版上直接运�
 | `npm run update-lock` | cmdsift 版本升级后，重新下载所有平台二进制并刷新 `binaries.lock.json` 中的 SHA256 哈希 |
 | `npm run update-lock:win32-x64` | 只刷新 Windows x64 平台的 SHA256 锁 |
 | `npm run update-lock:linux-x64` | 只刷新 Linux x64 平台的 SHA256 锁 |
+| `npm run pack-offline` | 构建当前平台离线安装包到 `dist/`（入口包 + 平台子包 + 安装脚本） |
+| `npm run pack-offline:linux-x64` | 只构建 Linux x64 平台离线包 |
+| `npm run pack-offline:win32-x64` | 只构建 Windows x64 平台离线包 |
+| `npm run pack-offline:all` | 构建所有平台离线包 |
 
 下载时设置 `GITHUB_TOKEN` 环境变量可避免 GitHub 匿名 API 限流。
 

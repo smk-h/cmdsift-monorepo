@@ -21,7 +21,11 @@
     "prepare-binaries:linux-x64": "node ./build/prepare-binaries.js --target x86_64-unknown-linux-musl",
     "update-lock": "node ./build/prepare-binaries.js --update-lock",
     "update-lock:win32-x64": "node ./build/prepare-binaries.js --target x86_64-pc-windows-msvc --update-lock",
-    "update-lock:linux-x64": "node ./build/prepare-binaries.js --target x86_64-unknown-linux-musl --update-lock"
+    "update-lock:linux-x64": "node ./build/prepare-binaries.js --target x86_64-unknown-linux-musl --update-lock",
+    "pack-offline": "node ./build/pack-offline.js",
+    "pack-offline:all": "node ./build/pack-offline.js --all",
+    "pack-offline:linux-x64": "node ./build/pack-offline.js --target linux-x64",
+    "pack-offline:win32-x64": "node ./build/pack-offline.js --target win32-x64"
   },
   "devDependencies": {
     "@types/node": "^20.8.4"
