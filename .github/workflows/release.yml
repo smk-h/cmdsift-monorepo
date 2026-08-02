@@ -33,7 +33,10 @@ jobs:
         id: meta
         run: |
           VERSION=$(node -p "require('./package.json').version")
+          # 二进制版本取自 build/platforms.js 的 VERSION 常量（如 v1.1.0），去掉 v 前缀
+          BIN_VERSION=$(node -p "require('./build/platforms.js').VERSION.replace(/^v/, '')")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "bin_version=$BIN_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create draft release
@@ -49,16 +52,20 @@ jobs:
 
             | 文件 | 适用场景 |
             |------|---------|
-            | `cmdsift-offline-<version>-linux-x64.tar.gz` | Linux x64 离线包（含平台二进制），**无网**环境 |
-            | `cmdsift-offline-<version>-win32-x64.tar.gz` | Windows x64 离线包（含平台二进制），**无网**环境 |
+            | `cmdsift-offline-${{ steps.meta.outputs.version }}-bin${{ steps.meta.outputs.bin_version }}-linux-x64.tar.gz` | Linux x64 离线包（含平台二进制），**无网**环境 |
+            | `cmdsift-offline-${{ steps.meta.outputs.version }}-bin${{ steps.meta.outputs.bin_version }}-win32-x64.tar.gz` | Windows x64 离线包（含平台二进制），**无网**环境 |
+
+            > 文件名格式：`cmdsift-offline-<分发包版本>-bin<二进制版本>-<平台>.tar.gz`
+            > - 分发包版本：npm 包版本（如 `0.3.0`）
+            > - 二进制版本：cmdsift 二进制版本（如 `1.1.0`），取自 `build/platforms.js` 的 `VERSION`
 
             ### 离线环境（offline 包）
 
-            下载对应平台的 `cmdsift-offline-<version>-<平台>.tar.gz`，传到目标服务器后：
+            下载对应平台的 tar.gz，传到目标服务器后：
 
             ```bash
-            tar -xzf cmdsift-offline-${{ steps.meta.outputs.version }}-<平台>.tar.gz
-            cd cmdsift-offline-${{ steps.meta.outputs.version }}-<平台>
+            tar -xzf cmdsift-offline-${{ steps.meta.outputs.version }}-bin${{ steps.meta.outputs.bin_version }}-<平台>.tar.gz
+            cd cmdsift-offline-${{ steps.meta.outputs.version }}-bin${{ steps.meta.outputs.bin_version }}-<平台>
             bash offline-install.sh
             which cmdsift  # 验证
             ```

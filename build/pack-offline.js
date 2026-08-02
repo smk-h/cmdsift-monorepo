@@ -16,7 +16,7 @@
  *              tar.gz，供无网络/内网环境全局安装。
  *
  *              【离线包结构】
- *              cmdsift-offline-<version>-<os>-<cpu>/
+ *              cmdsift-offline-<pkgVersion>-bin<binVersion>-<os>-<cpu>/
  *              ├── offline-install.sh
  *              ├── cmdsift/
  *              │   ├── package.json
@@ -45,7 +45,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { platforms } = require('./platforms');
+const { platforms, VERSION } = require('./platforms');
 
 const ROOT = path.join(__dirname, '..');
 const PACKAGES_DIR = path.join(ROOT, 'packages');
@@ -147,10 +147,16 @@ function copyPackageFiles(srcPkgDir, destPkgDir) {
 function buildOfflinePackage(platform) {
   const { os, cpu } = platform;
   const shortName = `cmdsift-${os}-${cpu}`;
-  const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  const version = rootPkg.version;
+  // 版本号取自入口包 @smai-kit/cmdsift 自身的 package.json，
+  // 确保离线包名准确体现 cmdsift 的发布版本
+  const entryPkg = JSON.parse(
+    fs.readFileSync(path.join(PACKAGES_DIR, 'cmdsift', 'package.json'), 'utf8')
+  );
+  const version = entryPkg.version;
+  // 二进制版本（上游 cmdsift 的 GitHub Release tag，如 v1.1.0）
+  const binVersion = VERSION.replace(/^v/, '');
 
-  console.log(`\n━━━ 构建 ${shortName} 离线包 (v${version}) ━━━`);
+  console.log(`\n━━━ 构建 ${shortName} 离线包 (pkg v${version} / bin v${binVersion}) ━━━`);
 
   // 源目录
   const entrySrc = path.join(PACKAGES_DIR, 'cmdsift');
@@ -175,7 +181,8 @@ function buildOfflinePackage(platform) {
   }
 
   // 准备临时构建目录
-  const pkgName = `cmdsift-offline-${version}-${os}-${cpu}`;
+  // 包名同时体现 npm 分发包版本与 cmdsift 二进制版本，便于区分不同二进制构建
+  const pkgName = `cmdsift-offline-${version}-bin${binVersion}-${os}-${cpu}`;
   const buildDir = path.join(DIST_DIR, pkgName);
   // 清理旧产物
   fs.rmSync(buildDir, { recursive: true, force: true });
