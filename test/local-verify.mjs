@@ -237,8 +237,9 @@ async function main() {
       fail('cmdsiftPath 解析应成功', err.message);
     }
 
-    // ── 用例 8：执行二进制，正常退出有输出 ─────────────────
-    console.log('\n── 用例 8：通过 child_process 执行二进制 ──');
+    // ── 用例 8：执行二进制 --help，正常退出有输出 ─────────────
+    // 注意：cmdsift 不带子命令时以非零码退出（missing command），故用 --help 验证可执行性
+    console.log('\n── 用例 8：通过 child_process 执行二进制（--help）──');
     if (cmdsiftPath) {
       try {
         const stdout = run(
@@ -250,7 +251,7 @@ async function main() {
               `  const {execFile}=await import('node:child_process');`,
               `  const {promisify}=await import('node:util');`,
               `  const x=promisify(execFile);`,
-              `  try{const{stdout}=await x(m.cmdsiftPath,[],{timeout:5000});process.stdout.write(stdout);}`,
+              `  try{const{stdout}=await x(m.cmdsiftPath,['--help'],{timeout:5000});process.stdout.write(stdout);}`,
               `  catch(e){process.stderr.write(String(e.message));process.exit(1);}`,
               `})`,
             ].join('\n'),
