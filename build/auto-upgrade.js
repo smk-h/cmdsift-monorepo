@@ -30,8 +30,9 @@
  *                - npm run update-lock（即 prepare-binaries.js --update-lock）
  *                  重新下载各平台 archive 并写入新 SHA256 到 binaries.lock.json
  *                - npm run sync-packages
- *                  把 patch bump 后的 npm 版本号同步到所有子包 package.json 及
- *                  入口包的 optionalDependencies
+ *                  把 minor bump 后的 npm 版本号同步到所有子包 package.json 及
+ *                  入口包的 optionalDependencies，并重写 package-lock.json
+ *                  保证 CI 的 npm ci 与各 package.json 一致
  *
  *              【用法】
  *                node build/auto-upgrade.js                     # 自动取上游最新 release

@@ -217,7 +217,7 @@ Linux 版本使用 musl 静态链接，可在任意 Linux 发行版上直接运�
 
 | 命令 | 作用 |
 |------|------|
-| `npm run sync-packages` | 根据根版本号和平台列表同步所有子包的 `package.json`、`README.md` 和 `LICENSE` |
+| `npm run sync-packages` | 根据根版本号和平台列表同步所有子包的 `package.json`、`README.md` 和 `LICENSE`，并重写 `package-lock.json` |
 | `npm run prepare-binaries` | 下载所有平台缺失的二进制文件，用 `binaries.lock.json` 校验 SHA256，不匹配则报错 |
 | `npm run prepare-binaries:win32-x64` | 只下载 Windows x64 平台的二进制并校验 |
 | `npm run prepare-binaries:linux-x64` | 只下载 Linux x64 平台的二进制并校验 |

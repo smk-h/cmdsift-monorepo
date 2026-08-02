@@ -22,7 +22,7 @@
 
 【**注意**】
 
-哈希锁与子包清单全部由脚本自动生成，**禁止手填**。版本变更时只需动上述两个真相源之一（或两个都动），脚本会处理其余。
+哈希锁、子包清单与 [`package-lock.json`](package-lock.json) 全部由脚本自动生成/同步，**禁止手填**。版本变更时只需动上述两个真相源之一（或两个都动），脚本会处理其余。
 
 ### 2. npm 版本号的语义约定
 
@@ -62,13 +62,14 @@ X . Y . Z
 npm run auto-upgrade
 ```
 
-该脚本自动完成 5 步：
+该脚本自动完成 6 步：
 
 - 查询上游最新 release tag（或用 `--target=v0.2.0` 指定版本）
 - 若 [`build/platforms.js`](build/platforms.js) 已是该版本则跳过（退出码 2）
 - 更新 `VERSION` 常量
 - 下载各平台 archive、计算 SHA256 并重写 [`binaries.lock.json`](binaries.lock.json)
 - **minor bump npm 版本号**（中位 +1、末位归零，如 `0.2.3` → `0.3.0`）并运行 `sync-packages` 同步到子包
+- 同步重写 [`package-lock.json`](package-lock.json)（由 `sync-packages` 自动完成），保证 CI 的 `npm ci` 与各 package.json 一致
 
 脚本需要访问 GitHub Releases，建议设置 `GITHUB_TOKEN` 以避免匿名 API 限流：
 
@@ -84,6 +85,7 @@ GITHUB_TOKEN=<your-token> npm run auto-upgrade
 - [`binaries.lock.json`](binaries.lock.json)（新 SHA256）
 - 根 [`package.json`](package.json)（minor bump 后的 npm 版本）
 - 所有由 `sync-packages` 重新生成的 [`packages/`](packages/) 下的 `package.json`、`README.md`、`LICENSE`
+- [`package-lock.json`](package-lock.json)（`sync-packages` 自动同步后的依赖锁）
 
 提交信息中带上 `[publish]` 关键字即可触发 CNB 发布流水线（版本号取脚本输出的 npm 版本）：
 
@@ -102,6 +104,8 @@ git commit -m "release: 0.3.0 [publish]"
 按 semver 约定，仅入口包代码改动对应 **patch** 升级（末位 +1，中位不变）。编辑根 [`package.json`](package.json) 的 `version` 字段（如 `0.3.0` → `0.3.1`）。
 
 ### 2. 同步并提交
+
+`sync-packages` 除同步子包清单外，还会自动重写 [`package-lock.json`](package-lock.json)，无需手动执行 `npm install`：
 
 ```sh
 npm run sync-packages
