@@ -1,6 +1,6 @@
 {
   "name": "cmdsift-monorepo",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Monorepo for @smai-kit/cmdsift and its per-platform binary packages.",
   "repository": {
