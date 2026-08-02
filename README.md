@@ -251,7 +251,81 @@ Linux 版本使用 musl 静态链接，可在任意 Linux 发行版上直接运�
 - [cmdsift](https://github.com/smk-h/cmdsift) — Rust 源码项目，通过 GitHub Actions 发布二进制到 Release 页面
 - [vscode-ripgrep](https://github.com/microsoft/vscode-ripgrep) — 本项目的设计参考，ripgrep 的 npm 分发方案
 
-## 五、 License
+## 五、 调试未发布的包
+
+发布到 npm 之前，可以在仓库内或其他本地项目中调试各子包。两种场景的共同前提：当前平台子包的二进制已填充（如 `npm run prepare-binaries:linux-x64`）。
+
+### 1. 仓库内调试
+
+#### 1.1 端到端验证（推荐）
+
+```sh
+npm run verify
+```
+
+该脚本将入口包与当前平台子包 `npm pack` 成 tarball，在隔离临时目录中模拟真实用户安装并逐项断言（平台分发、路径解析、二进制可执行、ESM/CJS 双模导入），无需发布即可验证改动，详见 [test/README.md](test/README.md)。
+
+#### 1.2 workspace 软链
+
+```sh
+npm install --force
+node -e "import('@smai-kit/cmdsift').then(m => console.log(m.cmdsiftPath))"
+```
+
+输出路径应位于 `packages/cmdsift-<os>-<cpu>/bin/` 下。其中 `--force` 用于跳过非宿主平台子包的 `os`/`cpu` 校验：npm 会对 workspace 节点强制做平台检查，裸 `npm install` 在非 Windows 平台必报 `EBADPLATFORM`，跳过即可、无副作用（详见 [VERSION-BUMP.md](VERSION-BUMP.md) 第六章）。
+
+【**注意**】
+
+根包脚本（`sync-packages`、`prepare-binaries`、`verify` 等）均不依赖根 `node_modules`，仅在需要 workspace 软链或 `@types/node` 类型提示时才需执行 `npm install --force`。
+
+### 2. 在其他项目中调试
+
+#### 2.1 file: 目录依赖（日常联调）
+
+在目标项目的 `package.json` 中临时声明：
+
+```json
+{
+  "dependencies": {
+    "@smai-kit/cmdsift": "file:../cmdsift-monorepo/packages/cmdsift",
+    "@smai-kit/cmdsift-linux-x64": "file:../cmdsift-monorepo/packages/cmdsift-linux-x64"
+  }
+}
+```
+
+执行 `npm install` 后，npm 对 `file:` 目录建立软链，修改 [`packages/cmdsift/lib/index.js`](packages/cmdsift/lib/index.js) 立即生效，无需重新打包。要点如下：
+
+- 必须同时显式声明当前平台的子包：入口包的 `optionalDependencies` 指向未发布版本，npm 在 registry 找不到会静默跳过，导致二进制缺失、运行时抛出 `Could not find`；显式声明同版本平台包可顶替该 optional 依赖
+- Node 按 realpath 解析软链，`require.resolve` 实际命中 monorepo 根 `node_modules` 下的软链，因此需先在 monorepo 执行过 `npm install --force`
+- TypeScript 项目可直接 `import { cmdsiftPath } from '@smai-kit/cmdsift'`，入口包自带类型声明 `lib/index.d.ts`
+
+【**注意**】
+
+`file:` 依赖指向本机绝对/相对路径，随包发布后消费者安装必然失败。发布目标项目前，必须将其改回正式版本号（如 `^0.2.0`），并删除平台子包的显式声明（真实用户由入口包的 `optionalDependencies` 按平台自动安装）。
+
+#### 2.2 npm pack tarball（验证真实安装行为）
+
+```sh
+# 在 monorepo 中打包入口包与当前平台子包
+cd packages/cmdsift && npm pack --pack-destination /tmp/cs
+cd ../cmdsift-linux-x64 && npm pack --pack-destination /tmp/cs
+
+# 在目标项目中安装
+npm install /tmp/cs/smai-kit-cmdsift-0.2.0.tgz /tmp/cs/smai-kit-cmdsift-linux-x64-0.2.0.tgz
+```
+
+- 与发布后用户的真实安装行为一致，`cmdsiftPath` 解析到目标项目自身的 `node_modules`
+- 每次修改 `lib/` 后需重新 `npm pack` 并重新安装
+- 安装与宿主平台不匹配的子包（如在 Linux 上安装 win32 包）需追加 `--force`
+
+#### 2.3 方式选择
+
+| 调试场景 | 推荐方式 |
+|----------|----------|
+| 频繁修改入口包代码、要求改动即时生效 | `file:` 目录依赖 |
+| 集成完成、验证真实安装与分发链路 | `npm pack` tarball |
+
+## 六、 License
 
 MIT
 
