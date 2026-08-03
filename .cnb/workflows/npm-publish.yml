@@ -1,11 +1,11 @@
 # npm 自动发布流水线
-# 当 push 的提交记录中含有 [publish] 时触发
+# 仅在 main 分支的 push 中、且提交记录含有 [publish] 时触发
 # 发布流程:
 #   1. 下载各平台二进制文件 (从 cmdsift 的 GitHub Release)
 #   2. SHA256 校验
 #   3. 依次发布平台子包和入口包到 npm
 
-"**":
+main:
   push:
     - docker:
         image: node:22
