@@ -1,10 +1,10 @@
 {
   "x86_64-pc-windows-msvc": {
-    "version": "v1.2.0",
-    "sha256": "141fecb52cd605ca88639467a8c4dc64883cdec49a53f96a257d7a6cd8026686"
+    "version": "v1.3.0",
+    "sha256": "a64d412d9b441cb2fd0f1ff8d0fca01b61fc9eae485b54d96faff0adfa5567ed"
   },
   "x86_64-unknown-linux-musl": {
-    "version": "v1.2.0",
-    "sha256": "995661794ec331d62e79a39c9cd10ad72503b2dd1b0165285940f0017eae8b90"
+    "version": "v1.3.0",
+    "sha256": "a11d7341cb429f880a62fde5e62a5d9c0a7c1e32deb73dcbb39e7c64d03dffb7"
   }
 }
