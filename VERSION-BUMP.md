@@ -35,7 +35,7 @@ X . Y . Z
 └───────── major（首位）：破坏性变更（首位 +1，中位与末位归零）
 ```
 
-三种典型发版情况对应的操作：
+三种典型发版情况对应的操作（三种情况提交时都需同时携带 `[publish]` 与 `[release]`，详见下方[提交信息模板](#3-提交信息模板)）：
 
 | 情况 | 谁变了 | semver bump | 示例 | 怎么操作 |
 |------|--------|------------|------|---------|
@@ -51,6 +51,47 @@ X . Y . Z
 
 - 看到 patch 位非 0（如 `0.2.3`）→ 知道在这个二进制版本下又改了 3 次入口包代码
 - 看到 minor 位变化（如 `0.2.x` → `0.3.0`）→ 知道二进制更新了，patch 计数从头开始
+
+### 3. 提交信息模板
+
+**任何版本变更的提交都必须同时携带 `[publish]` 与 `[release]` 两个标记**——二者一一对应、缺一不可：
+
+- `[publish]` → 触发 CNB 的 [`npm-publish.yml`](.cnb/workflows/npm-publish.yml)，发布 npm 包
+- `[release]` → 触发 GitHub 的 [`release.yml`](.github/workflows/release.yml)，打离线安装包
+
+离线包捆绑了入口包（`lib/`），入口包版本一变离线包就得重打，所以「发 npm」和「打离线包」总是成对出现，不存在只发其一的情况。
+
+提交信息统一采用如下格式（标题行 + 正文 4 条 bullet，第 1 条固定描述上游二进制版本状态，让提交记录一眼可辨二进制动没动）：
+
+```
+chore(publish): version updated to <新版本> [publish] [release]
+
+- <上游二进制版本状态：升级至 vX.Y.Z，刷新 binaries.lock.json SHA256 / 维持 vX.Y.Z 不变>
+- <本版本入口包改动要点>
+- npm 包 lockstep <minor|patch> bump <旧版本> → <新版本>（根包与 N 个子包），同步 package-lock.json 保证 CI npm ci --force 通过
+- 同时携带 [release] 与 [publish]，一次提交完成 GitHub Release 与 npm 发布
+```
+
+【**情况②③（二进制升级，minor bump）示例**】
+
+```sh
+git commit -m "chore(publish): version updated to 0.4.0 [publish] [release]
+
+- 上游 cmdsift 二进制升级至 v1.2.0，刷新 binaries.lock.json SHA256
+- npm 包 lockstep minor bump 0.3.0 → 0.4.0（根包与 3 个子包），同步 package-lock.json 保证 CI npm ci --force 通过
+- 同时携带 [release] 与 [publish]，一次提交完成 GitHub Release 与 npm 发布"
+```
+
+【**情况①（仅入口包，patch bump）示例**】
+
+```sh
+git commit -m "chore(publish): version updated to 0.2.1 [publish] [release]
+
+- 上游 cmdsift 二进制维持 v1.0.0 不变
+- 入口包支持全局安装后通过 cmdsift 命令直接调用
+- npm 包 lockstep patch bump 0.2.0 → 0.2.1（根包与 3 个子包），同步 package-lock.json 保证 CI npm ci --force 通过
+- 同时携带 [release] 与 [publish]，一次提交完成 GitHub Release 与 npm 发布"
+```
 
 ## 二、 升级上游二进制版本
 
@@ -87,10 +128,14 @@ GITHUB_TOKEN=<your-token> npm run auto-upgrade
 - 所有由 `sync-packages` 重新生成的 [`packages/`](packages/) 下的 `package.json`、`README.md`、`LICENSE`
 - [`package-lock.json`](package-lock.json)（`sync-packages` 自动同步后的依赖锁）
 
-提交信息中带上 `[publish]` 关键字即可触发 CNB 发布流水线（版本号取脚本输出的 npm 版本）：
+提交信息按 [第一章第 3 节](#3-提交信息模板) 的模板填写，同时携带 `[publish]` 与 `[release]`（版本号取脚本输出的 npm 版本）：
 
 ```sh
-git commit -m "release: 0.3.0 [publish]"
+git commit -m "chore(publish): version updated to 0.3.0 [publish] [release]
+
+- 上游 cmdsift 二进制升级至 v1.1.0，刷新 binaries.lock.json SHA256
+- npm 包 lockstep minor bump 0.2.1 → 0.3.0（根包与 3 个子包），同步 package-lock.json 保证 CI npm ci --force 通过
+- 同时携带 [release] 与 [publish]，一次提交完成 GitHub Release 与 npm 发布"
 ```
 
 ## 三、 仅发布入口包代码改动
@@ -110,7 +155,12 @@ git commit -m "release: 0.3.0 [publish]"
 ```sh
 npm run sync-packages
 git add -A
-git commit -m "release: 0.3.1 [publish]"
+git commit -m "chore(publish): version updated to 0.3.1 [publish] [release]
+
+- 上游 cmdsift 二进制维持 v1.1.0 不变
+- <本次入口包改动要点，如修复路径解析逻辑或调整 README>
+- npm 包 lockstep patch bump 0.3.0 → 0.3.1（根包与 3 个子包），同步 package-lock.json 保证 CI npm ci --force 通过
+- 同时携带 [release] 与 [publish]，一次提交完成 GitHub Release 与 npm 发布"
 ```
 
 ## 四、 添加新平台
@@ -154,22 +204,57 @@ npm run sync-packages
 
 ### 5. 升级版本并提交
 
-新增平台属于功能性变化，按 semver 约定对应 **minor** 升级（中位 +1、末位归零，如 `0.3.1` → `0.4.0`）。编辑根 [`package.json`](package.json) 的 `version` 字段，运行 `sync-packages`，提交带 `[publish]` 的 commit。
+新增平台属于功能性变化，按 semver 约定对应 **minor** 升级（中位 +1、末位归零，如 `0.3.1` → `0.4.0`）。编辑根 [`package.json`](package.json) 的 `version` 字段，运行 `sync-packages`，按 [第一章第 3 节](#3-提交信息模板) 的模板提交，例如：
+
+```sh
+git commit -m "chore(publish): version updated to 0.4.0 [publish] [release]
+
+- 上游 cmdsift 二进制维持 v1.1.0 不变
+- 新增 darwin-arm64 平台子包，扩展平台覆盖
+- npm 包 lockstep minor bump 0.3.1 → 0.4.0（根包与 4 个子包），同步 package-lock.json 保证 CI npm ci --force 通过
+- 同时携带 [release] 与 [publish]，一次提交完成 GitHub Release 与 npm 发布"
+```
 
 ## 五、 CI 发布流水线行为
 
+本仓库有**两条独立但配套**的发布流水线，由提交信息中的两个标记分别触发，**必须同时携带**：
+
+| 标记 | 流水线 | 平台 | 产物 |
+|------|--------|------|------|
+| `[publish]` | [`.cnb/workflows/npm-publish.yml`](.cnb/workflows/npm-publish.yml) | CNB | npm 包（入口包 + 各平台子包）|
+| `[release]` | [`.github/workflows/release.yml`](.github/workflows/release.yml) | GitHub Actions | 离线安装包 tar.gz（含入口包 lib + 二进制 bin + 安装脚本）|
+
+离线包捆绑入口包的 `lib/`，只要 npm 包版本一变，离线包内容就跟着变，必须重打——所以无论二进制升级、入口包改动还是新增平台，提交信息都要 `[publish]` `[release]` 一起带，二者一一对应、缺一不可。
+
+### 1. npm 发布流水线（CNB，`[publish]`）
+
 发布流水线定义在 [`.cnb/workflows/npm-publish.yml`](.cnb/workflows/npm-publish.yml)，由提交信息包含 `[publish]` 触发，依次执行以下阶段：
 
-1. `npm ci --force` 安装依赖（`--force` 用于跳过非宿主平台子包的 os/cpu 校验，这是 workspace 模式下的正常现象，无副作用）
-2. `npm run sync-packages` 保证发布的清单与提交的根版本一致（即便开发者本地忘了运行也无妨）
-3. `npm run prepare-binaries` 下载并 SHA256 校验二进制
-4. 依次发布平台子包（`linux-x64`、`win32-x64`），最后发布入口包 `@smai-kit/cmdsift`
+（1）`npm ci --force` 安装依赖（`--force` 用于跳过非宿主平台子包的 os/cpu 校验，这是 workspace 模式下的正常现象，无副作用）
+
+（2）`npm run sync-packages` 保证发布的清单与提交的根版本一致（即便开发者本地忘了运行也无妨）
+
+（3）`npm run prepare-binaries` 下载并 SHA256 校验二进制
+
+（4）依次发布平台子包（`linux-x64`、`win32-x64`），最后发布入口包 `@smai-kit/cmdsift`
 
 【**发布顺序**】
 
 平台子包必须先于入口包发布，因为入口包的 `optionalDependencies` 指向它们——若顺序颠倒，用户在安装入口包时会因找不到平台子包而报错。
 
 每个发布阶段都内置了幂等保护：发布前先用 `npm view` 查询目标版本是否已存在，已存在则跳过该包，避免重试时触发 `EPUBLISHCONFLICT`。
+
+### 2. 离线包发布流水线（GitHub Actions，`[release]`）
+
+离线包流水线定义在 [`.github/workflows/release.yml`](.github/workflows/release.yml)，由提交信息包含 `[release]` 触发，分三个阶段：
+
+（1）创建草稿 Release（tag 取 `v<npm版本>`，如 `v0.4.0`）
+
+（2）matrix 并行为各平台下载二进制并打包，上传产物
+
+（3）所有产物上传完毕后取消草稿、正式发布
+
+离线包文件名格式为 `cmdsift-offline-<分发包版本>-bin<二进制版本>-<平台>.tar.gz`，其中分发包版本即 npm 包版本，二进制版本取自 [`build/platforms.js`](build/platforms.js) 的 `VERSION` 常量。两者数值相互独立（如 npm `0.4.0` + 二进制 `v1.2.0`），合在一起精确描述包内 JS 与二进制各自的版本。
 
 ## 六、 发布前本地验证
 
