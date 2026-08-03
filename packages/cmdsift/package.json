@@ -1,6 +1,6 @@
 {
   "name": "@smai-kit/cmdsift",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A module for using cmdsift in a Node project",
   "type": "module",
   "main": "./lib/index.js",
@@ -26,7 +26,7 @@
   "author": "sumu",
   "license": "MIT",
   "optionalDependencies": {
-    "@smai-kit/cmdsift-win32-x64": "0.3.0",
-    "@smai-kit/cmdsift-linux-x64": "0.3.0"
+    "@smai-kit/cmdsift-win32-x64": "0.4.0",
+    "@smai-kit/cmdsift-linux-x64": "0.4.0"
   }
 }

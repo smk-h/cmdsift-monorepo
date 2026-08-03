@@ -17,7 +17,7 @@
  * cmdsift 的 GitHub Release 版本标签
  * 对应 cmdsift 仓库 Cargo.toml 中的 version，格式为 v<x.y.z>
  */
-const VERSION = 'v1.1.0';
+const VERSION = 'v1.2.0';
 
 /**
  * cmdsift 的 GitHub 仓库（owner/repo 格式）
